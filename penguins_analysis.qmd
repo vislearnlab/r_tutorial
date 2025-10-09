@@ -1,0 +1,41 @@
+# Loading packages
+```{r}
+library(tidyverse)
+library(palmerpenguins)
+```
+
+```{r}
+test_variable <- 5
+penguins_df <- penguins
+```
+
+```{r}
+cleaned_penguins_df <- penguins_df |>
+  mutate(age = 2025 - year) 
+  # |>
+  #filter(flipper_length_mm > 200) |>
+  # group_by(species) |>
+  # summarize(num_penguins = n(), mean_body_mass = mean(body_mass_g, na.rm = TRUE))
+```
+
+```{r}
+mean_bill_length <- cleaned_penguins_df |> group_by(species) |> summarize(num_penguins = n(), mean_bill_length = mean(bill_length_mm, na.rm = TRUE))
+mean_bill_length
+```
+```{r}
+penguins_df |>
+  count(species, island) 
+
+prop_species_df <- penguins_df |> group_by(species, island) |>
+  mutate(n_per_species_and_island = n()) |>
+  group_by(island) |>
+  mutate(n_per_island = n(), prop_species = n_per_species_and_island / n_per_island) 
+```
+```{r}
+ggplot(data=penguins_df,
+       mapping = aes(x=flipper_length_mm, y=bill_length_mm)) +
+  geom_point(size=4, alpha=0.5) +
+  labs(x="Flipper length (mm)", y="Bill Length (mm)", title="Correlation between flipper length and bill length") +
+  geom_smooth() +
+  theme_classic()
+```
