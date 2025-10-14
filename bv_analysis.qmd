@@ -78,10 +78,12 @@ combined_data <- bind_rows(completed_data, initial_data)
 
 # Add object names (object_id is 0-indexed or 1-indexed, adjust accordingly)
 # Assuming object_id matches the index in object_names (1-indexed)
-combined_data <- combined_data %>%
-  mutate(object_name = object_names[object_id])  # Add 1 if 0-indexed
+#combined_data <- combined_data %>%
+ # mutate(object_name = object_names[object_id])  # Add 1 if 0-indexed
 # THIS IS WRONG ^
+```
 
+```{r}
 # View the result
 head(combined_data)
 ```
@@ -92,7 +94,9 @@ completed_data <- completed_data %>%
   mutate(object_name = object_names_completed[object_id+1])
 initial_data <- initial_data %>%
   mutate(object_name = object_names_initial[object_id+1])
+```
 
+```{r}
 # Function to calculate IoU (Intersection over Union)
 calculate_iou <- function(box1, box2) {
   # Convert from center format to corner format
@@ -189,7 +193,9 @@ match_boxes <- function(filename_base) {
   
   bind_rows(matches, fn_rows)
 }
+```
 
+```{r}
 # Get all unique filenames
 all_filenames <- unique(c(completed_data$filename, initial_data$filename))
 
@@ -201,8 +207,8 @@ file_metrics <- all_matches %>%
   group_by(filename) %>%
   summarise(
     true_positives = sum(!is.na(completed_id) & matched),
-    false_positives = sum(!is.na(completed_id) & !matched),
-    false_negatives = sum(is.na(completed_id)),
+    false_negatives = sum(!is.na(completed_id) & !matched),
+    false_positives = sum(is.na(completed_id)),
     total_completed = sum(!is.na(completed_id)),
     total_initial = sum(!is.na(initial_id)),
     mean_iou = mean(iou[iou > 0], na.rm = TRUE)
@@ -220,8 +226,8 @@ file_metrics <- all_matches %>%
 overall_metrics <- all_matches %>%
   summarise(
     true_positives = sum(!is.na(completed_id) & matched),
-    false_positives = sum(!is.na(completed_id) & !matched),
-    false_negatives = sum(is.na(completed_id))
+    false_negatives = sum(!is.na(completed_id) & !matched),
+    false_positives = sum(is.na(completed_id))
   ) %>%
   mutate(
     precision = true_positives / (true_positives + false_positives),
@@ -234,11 +240,12 @@ class_metrics <- all_matches %>%
   group_by(object_name) %>%
   summarise(
     true_positives = sum(!is.na(completed_id) & matched),
-    false_positives = sum(!is.na(completed_id) & !matched),
-    false_negatives = sum(is.na(completed_id)),
-    count = n()
+    false_negatives = sum(!is.na(completed_id) & !matched),
+    false_positives = sum(is.na(completed_id)),
+    count = n(),
+    completed_count = sum(!is.na(completed_id))
   ) %>%
-  filter(count >= 5) %>%  # Only classes with at least 5 instances
+  filter(completed_count >= 3) %>%  # Only classes with at least 5 instances
   mutate(
     precision = true_positives / (true_positives + false_positives),
     recall = true_positives / (true_positives + false_negatives),
