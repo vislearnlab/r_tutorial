@@ -15,6 +15,9 @@ object_names_initial <- read_lines(here("data/initial/obj.names"))
 
 object_data_initial <- read_lines(here("data/initial/obj.data"))
 
+cdi_data <- read.csv(here("data/cdi_words.csv"))
+
+# for future use!
 total_frames_annotated <- 1000
 ```
 
@@ -25,7 +28,8 @@ paste("Number of new detected objects:", length(object_names_completed)-length(o
 
 ```{r}
 # Get all txt files from both directories
-completed_files <- list.files(here("data/completed/obj_train_data"), 
+# add/remove /frames as needed after /obj_train_data
+completed_files <- list.files(here("data/completed/obj_train_data/frames"), 
                                pattern = "\\.txt$", 
                                full.names = TRUE)
 
@@ -37,6 +41,10 @@ initial_files <- list.files(here("data/initial"),
 # Remove files ending with 'train.txt' from initial_files
 initial_files <- initial_files[!grepl("train\\.txt$", initial_files)]
 
+total_frames_annotated <- min(length(completed_files), total_frames_annotated)
+
+completed_files <- completed_files[1:total_frames_annotated]
+initial_files <- initial_files[1:total_frames_annotated]
 
 # Function to parse a single file
 parse_bbox_file <- function(file_path, source_dir) {
@@ -72,20 +80,11 @@ completed_data <- map_dfr(completed_files,
                           ~parse_bbox_file(.x, "completed"))
 initial_data <- map_dfr(initial_files, 
                         ~parse_bbox_file(.x, "initial"))
-
-# Combine both datasets
-combined_data <- bind_rows(completed_data, initial_data)
-
-# Add object names (object_id is 0-indexed or 1-indexed, adjust accordingly)
-# Assuming object_id matches the index in object_names (1-indexed)
-#combined_data <- combined_data %>%
- # mutate(object_name = object_names[object_id])  # Add 1 if 0-indexed
-# THIS IS WRONG ^
 ```
 
 ```{r}
 # View the result
-head(combined_data)
+head(completed_data)
 ```
 
 ```{r}
@@ -277,8 +276,7 @@ cat(sprintf("F-Score: %.3f\n", summarized_class_metrics$f_score))
 ## make fun plots
 # plots
 ```{r}
-
-# Plot: Distribution of IoU scores
+# Plot: Distribution of Intersection over Union scores
 p1 <- all_matches %>%
   filter(!is.na(completed_id), iou > 0) %>%
   ggplot(aes(x = iou)) +
@@ -290,7 +288,7 @@ p1 <- all_matches %>%
        y = "Count") +
   theme_minimal()
 
-# Plot: F-Score distribution per file
+# Plot: F-Score distribution per class
 p2 <- class_metrics %>%
   ggplot(aes(x = f_score)) +
   geom_histogram(bins = 30, fill = "forestgreen", alpha = 0.7) +
@@ -329,5 +327,53 @@ print(p3)
 print(p4)
 ggsave(here("output/fscore_class.png"), width=5, height=12, bg="white")
 ```
+# Prettier precision vs recall
+```{r}
+class_metrics_with_cdi <- class_metrics |> left_join(cdi_data, by=c("object_name"="uni_lemma"))
 
-Send the overall f-score results, the class-wise f-score plot, and the class_metrics.csv file in the channel! Feel free to make more plots and run more analyses.
+ggplot(data=class_metrics_with_cdi |> filter(completed_count >= 3), aes(x=recall, y=precision)) +
+  geom_jitter(alpha=0.6, aes(size=completed_count, color=is_animate)) + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
+  #ggrepel::geom_label_repel(aes(label=object_name)) +
+  xlim(0, 1) +
+  ylim(0, 1)
+```
+
+## class-wise f score summaries
+```{r}
+class_metrics_with_cdi <- class_metrics |> left_join(cdi_data, by=c("object_name"="uni_lemma"))
+
+summarized_data <- function(data, x_var, y_var, group_var) {
+  return(data |>
+           group_by(across(all_of(c(x_var, group_var)))) |>
+           summarize(
+             #across(everything(), ~ if (n_distinct(.) == 1) first(.) else NA),
+             mean_value = mean(.data[[y_var]], na.rm = TRUE),
+             sd_value = sd(.data[[y_var]], na.rm = TRUE),
+             N = n(),
+             se = sd_value / sqrt(n()),
+             ci=qt(0.975, N-1)*sd_value/sqrt(N),
+             lower_ci=mean_value-ci,
+             upper_ci=mean_value+ci,
+             .groups = 'drop') |>
+           select(where(~ !all(is.na(.))))
+  )
+}
+
+class_metrics_summarized <- summarized_data(class_metrics_with_cdi, "category", "f_score", "category") |> filter(N > 5)
+
+p5 <- class_metrics_summarized %>%
+  ggplot(aes(x = reorder(category, mean_value), y = mean_value)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=lower_ci, ymax=upper_ci)) +
+  labs(title = "F-Score by Object Category",
+       x = "Object Category",
+       y = "F-Score") +
+  theme_minimal()
+
+ggsave(here("output/fscore_category.png"), p5, width=10, height=5, bg="white")
+```
+
+
+
+Send the overall f-score results, the class-wise f-score plot, the f-score by object-category plot, and the class_metrics.csv file in the channel! Feel free to make more plots and run more analyses.
