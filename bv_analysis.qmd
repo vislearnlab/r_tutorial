@@ -242,9 +242,10 @@ class_metrics <- all_matches %>%
     false_negatives = sum(!is.na(completed_id) & !matched),
     false_positives = sum(is.na(completed_id)),
     count = n(),
-    completed_count = sum(!is.na(completed_id))
+    completed_count = sum(!is.na(completed_id)),
+    initial_count = sum(!is.na(initial_id)),
   ) %>%
-  filter(completed_count >= 3) %>%  # Only classes with at least 5 instances
+  filter(initial_count >= 1) |>
   mutate(
     precision = true_positives / (true_positives + false_positives),
     recall = true_positives / (true_positives + false_negatives),
@@ -254,7 +255,7 @@ class_metrics <- all_matches %>%
   arrange(desc(f_score))
 
 # Save results
-class_metrics <- class_metrics |> filter(!is.na(recall))
+#class_metrics <- class_metrics |> filter(!is.na(recall))
 write_csv(file_metrics, here("output/file_metrics.csv"))
 write_csv(class_metrics, here("output/class_metrics.csv"))
 write_csv(all_matches, here("output/detailed_matches.csv"))
@@ -265,16 +266,17 @@ write_csv(all_matches, here("output/detailed_matches.csv"))
 summarized_class_metrics <- class_metrics |>
   summarize(precision = mean(precision, na.rm = TRUE),
             recall =mean(recall, na.rm = TRUE),
-            f_score = mean(f_score, na.rm=TRUE))
+            f_score = mean(f_score, na.rm=TRUE),
+            n = n())
 
 cat("\n=== OVERALL METRICS ===\n")
-cat(sprintf("Precision: %.3f\n", summarized_class_metrics$precision))
-cat(sprintf("Recall: %.3f\n", summarized_class_metrics$recall))
-cat(sprintf("F-Score: %.3f\n", summarized_class_metrics$f_score))
+cat("Total categories:", summarized_class_metrics$n)
+cat(sprintf("\nPrecision: %.3f\n", summarized_class_metrics$precision))
+#cat(sprintf("Recall: %.3f\n", summarized_class_metrics$recall))
+#cat(sprintf("F-Score: %.3f\n", summarized_class_metrics$f_score))
 ```
 
-## make fun plots
-# plots
+## fun plots
 ```{r}
 # Plot: Distribution of Intersection over Union scores
 p1 <- all_matches %>%
@@ -290,7 +292,7 @@ p1 <- all_matches %>%
 
 # Plot: F-Score distribution per class
 p2 <- class_metrics %>%
-  ggplot(aes(x = f_score)) +
+  ggplot(aes(x = precision)) +
   geom_histogram(bins = 30, fill = "forestgreen", alpha = 0.7) +
   labs(title = "F-Score Distribution Across Classes",
        x = "F-Score",
@@ -298,7 +300,6 @@ p2 <- class_metrics %>%
   theme_minimal()
 
 # Plot: Precision vs Recall
-
 p3 <- class_metrics %>%
   ggplot(aes(x = recall, y = precision)) +
   geom_jitter(alpha = 0.5, color = "purple", width=0.05) +
@@ -310,12 +311,12 @@ p3 <- class_metrics %>%
   coord_fixed()
 
 p4 <- class_metrics %>%
-  ggplot(aes(x = reorder(object_name, f_score), y = f_score)) +
+  ggplot(aes(x = reorder(object_name, precision), y = precision)) +
   geom_col(fill = "coral") +
   coord_flip() +
-  labs(title = "F-Score by Object Class",
+  labs(title = "Precision by Object Class",
        x = "Object Class",
-       y = "F-Score") +
+       y = "Precision") +
   theme_minimal()
 ```
 
@@ -325,7 +326,7 @@ print(p1)
 print(p2)
 print(p3)
 print(p4)
-ggsave(here("output/fscore_class.png"), width=5, height=12, bg="white")
+ggsave(here("output/precision_class.png"), width=5, height=12, bg="white")
 ```
 # Prettier precision vs recall
 ```{r}
@@ -339,7 +340,7 @@ ggplot(data=class_metrics_with_cdi |> filter(completed_count >= 3), aes(x=recall
   ylim(0, 1)
 ```
 
-## class-wise f score summaries
+## class-wise precision summaries
 ```{r}
 class_metrics_with_cdi <- class_metrics |> left_join(cdi_data, by=c("object_name"="uni_lemma"))
 
@@ -360,20 +361,17 @@ summarized_data <- function(data, x_var, y_var, group_var) {
   )
 }
 
-class_metrics_summarized <- summarized_data(class_metrics_with_cdi, "category", "f_score", "category") |> filter(N > 5)
+class_metrics_summarized <- summarized_data(class_metrics_with_cdi, "category", "precision", "category") |> filter(N > 5)
 
 p5 <- class_metrics_summarized %>%
   ggplot(aes(x = reorder(category, mean_value), y = mean_value)) +
   geom_point() +
   geom_errorbar(aes(ymin=lower_ci, ymax=upper_ci)) +
-  labs(title = "F-Score by Object Category",
+  labs(title = "Precision by Object Category",
        x = "Object Category",
-       y = "F-Score") +
+       y = "Precision") +
   theme_minimal()
-
-ggsave(here("output/fscore_category.png"), p5, width=10, height=5, bg="white")
+p5
+ggsave(here("output/precision_category.png"), p5, width=10, height=5, bg="white")
 ```
-
-
-
-Send the overall f-score results, the class-wise f-score plot, the f-score by object-category plot, and the class_metrics.csv file in the channel! Feel free to make more plots and run more analyses.
+Send the overall precision results, the class-wise precision plot, the precision by object-category plot, and the class_metrics.csv file in the channel! Feel free to make more plots and run more analyses.
